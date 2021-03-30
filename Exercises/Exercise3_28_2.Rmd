@@ -1,0 +1,80 @@
+---
+title: "Exercise 3.28(2)"
+author: Xiaozhu Zhang
+output: html_notebook
+---
+```{r, message=FALSE}
+library(TeachingDemos)
+library(ggplot2)
+```
+
+Since the posterior distribution is
+\[ \pi(\theta|x) \propto \exp\left\{ -\frac{1}{2} (x-\theta)^2 \right\} \frac{1}{1+\theta^2}, \]
+where $x = 6$, we first should compute the denominator $Z$:
+```{r}
+f <- function(x){
+  exp(-0.5 * (x - 6)^2) / (1 + x^2)
+}
+Z <- integrate(f, -Inf, Inf)$value
+Z
+```
+
+Then we shell sample enough values from the posterior distribution, using the accept-reject method.
+
+**Step 1: the proposal distribution.**
+
+We can use the Gaussian distribution $N(5.5, 2^2)$ as the proposal distribution. Set $c = 2$. Such a choice is justified by the following test and graph. 
+```{r, fig.height=3.8, fig.width=7.8, fig.align='center'}
+set.seed(54321)
+# Test the validity of proposal distribution
+seq <- sapply(seq(-5, 15, 0.01), f)
+gam <- sapply(seq(-5, 15, 0.01), function(x){
+  dnorm(x, mean = 5.5, sd = 2)})
+gam.n <- gam * Z * 2
+
+# Number of invalid points
+sum(gam.n <= seq)
+
+# Visualization
+gp <- c(rep(0,length(seq)), rep(1, length(gam.n)))
+df <- data.frame(x = c(seq(-5, 15, 0.01), seq(-5, 15, 0.01)),
+                 y = c(seq, gam.n),
+                 gp = as.factor(gp))
+
+ggplot(data = df, aes(x = x, y = y, color = gp)) +
+  geom_point() +
+  scale_color_discrete(name = "Density", labels = c("Target", "Proposal")) +
+  ylab("Density")
+```
+
+In a nutshell, there is no invalid points, and the graph above shows that the proposal distribution is completely above the target distribution.
+
+**Step 2: the accept-reject procedure.**
+
+```{r}
+c = 2
+n = 1e6
+# Sample from the proposal distribution
+x.star <- rnorm(n, mean = 5.5, sd = 2)
+
+# Compute the accept-reject threshold
+ratio <- sapply(x.star, f) / 
+  (c * Z * sapply(x.star, function(x){dnorm(x, mean = 5.5, sd = 2)})) 
+
+# Decide to accept or not
+u <- runif(n)
+ind <- u <= ratio
+
+# Obtain the sample values
+x.final <- x.star[ind]
+length(x.final)
+```
+
+With the sampled values `x.final`, we can finaly find the 95% HPD of $\theta$:
+```{r}
+emp.hpd(x.final)
+```
+
+
+
+
