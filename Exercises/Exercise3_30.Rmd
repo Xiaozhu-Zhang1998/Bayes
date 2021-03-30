@@ -1,0 +1,90 @@
+---
+title: "Exercise 3.30"
+author: Xiaozhu Zhang
+output: html_notebook
+---
+```{r, message=FALSE}
+library(nimble)
+library(TeachingDemos)
+library(ggplot2)
+```
+
+# 1. HPD for $\sigma^2$ 
+The posterior for $\sigma^2$ is
+\[ \pi(\sigma^2|t) = \sigma^{-4} e^{-1/\sigma^2},  \]
+which is exactly the Inverse-Gamma distribution $\Gamma^{-1}(1,1)$. Therefore, the 95% HPD can be obtained by
+```{r}
+hpd(qinvgamma, shape = 1)
+```
+
+# 2. HPD for $\sigma$
+However, the posterior for $\sigma$ is
+\[\pi(\sigma|t) = 2 \sigma^{-3} e^{-1/\sigma^2},  \]
+which is a rather uncommon distribution. In order to find the HPD, we first need to sample enough values from this distribution, using the accept-reject method.
+
+**Step 1: the proposal distribution.**
+
+We can use the Inverse-Gamma distribution $\Gamma^{-1}(1,1)$ as the proposal distribution. Set $c = 2.1$. Such a choice is justified by the following test and graph. 
+```{r, fig.height= 4, fig.width=8, fig.align='center'}
+set.seed(54321)
+# The target distribution
+f <- function(x){
+  2 * x^(-3) * exp(-1/x^2)
+}
+
+# Test the validity of proposal distribution
+seq <- sapply(seq(0.01, 20, 0.01), f)
+gam <- sapply(seq(0.01, 20, 0.01), function(x){
+  dinvgamma(x, shape = 1)})
+gam.n <- gam * 2.1
+
+# Number of invalid points
+sum(gam.n <= seq)
+
+# Visualization
+gp <- c(rep(0,length(seq)), rep(1, length(gam.n)))
+df <- data.frame(x = c(seq(0.01, 20, 0.01), seq(0.01, 20, 0.01)),
+                 y = c(seq, gam.n),
+                 gp = as.factor(gp))
+
+ggplot(data = df, aes(x = x, y = y, color = gp)) +
+  geom_point() +
+  scale_color_discrete(name = "Density", labels = c("Target", "Proposal")) +
+  ylab("Density")
+```
+
+In a nutshell, there is no invalid points, and the graph above shows that the proposal distribution is completely above the target distribution.
+
+**Step 2: the accept-reject procedure.**
+
+```{r}
+c = 2.1
+n = 1e6
+# Sample from the proposal distribution
+x.star <- rinvgamma(n, shape = 1)
+
+# Compute the acceot-reject threshold
+ratio <- sapply(x.star, f) / (c * sapply(x.star, function(x){dinvgamma(x, shape = 1)})) 
+
+# Decide to accept or not
+u <- runif(n)
+ind <- u <= ratio
+
+# Obtain the sample values
+x.final <- x.star[ind]
+length(x.final)
+```
+
+With the sampled values `x.final`, we can finaly find the 95% HPD of $\sigma$:
+```{r}
+emp.hpd(x.final)
+```
+
+# 3. Conclusion
+Since $\sigma^2$ and $\sigma$ are from different distributions, we can presume that they have different HPD even without computing. Now that the HPD for $\sigma^2$ is about [0.093, 19.504], while the HPD for $\sigma$ is about [0.365, 4.444], the presumption is indeed true. However, if we square the HPD for $\sigma$:
+```{r}
+emp.hpd(x.final)^2
+```
+we can say that it is quite close to the interval for $\sigma^2$, though not exactly the same.
+
+
